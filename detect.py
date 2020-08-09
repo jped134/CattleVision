@@ -1,4 +1,4 @@
 print("Detection initiated")
 
-import opencv-python
-opencv-python.__version__
+import opencv
+opencv.__version__
