@@ -1,0 +1,35 @@
+# CattleVision – default configuration
+# Override any field by passing a custom YAML file to load_config().
+
+detector:
+  model_path: null           # null = download yolov8n.pt on first use
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  device: null               # null = auto (cuda > mps > cpu)
+
+embedder:
+  embedding_dim: 256
+  backbone: resnet50
+  pretrained: true
+  dropout: 0.3
+
+database:
+  similarity_threshold: 0.60  # cosine similarity below this → "unknown"
+  aggregation: max            # "max" or "mean" over gallery embeddings
+
+tracker:
+  max_age: 30                 # frames before a lost track is deleted
+  min_hits: 3                 # frames before a track is 'confirmed'
+  iou_threshold: 0.30
+  appearance_weight: 0.40     # blend: 0 = pure IoU, 1 = pure appearance
+
+training:
+  data_root: data/reid        # ImageNet-style folder: one subfolder per cow
+  output_dir: runs/train
+  embedding_dim: 256
+  epochs: 50
+  batch_size: 64
+  lr: 3.0e-4
+  margin: 0.30
+  val_split: 0.15
+  device: null
