@@ -92,7 +92,12 @@ def cmd_identify_image(args, cfg):
 
 
 def cmd_identify_video(args, cfg):
+    import time
+    import cv2
     from cattlevision import CowIdentifier
+    from cattlevision.pipeline.tracker import CowTracker
+    from cattlevision.behavioral.monitor import BehavioralMonitor
+    from cattlevision.utils.visualization import draw_identities
 
     identifier = CowIdentifier(
         embedder_path=args.embedder,
@@ -100,15 +105,90 @@ def cmd_identify_video(args, cfg):
         similarity_threshold=cfg.get("database", {}).get("similarity_threshold", 0.6),
         det_conf_threshold=cfg.get("detector", {}).get("conf_threshold", 0.25),
     )
+    t_cfg = cfg.get("tracker", {})
+    tracker = CowTracker(
+        max_age=t_cfg.get("max_age", 30),
+        min_hits=t_cfg.get("min_hits", 3),
+        iou_threshold=t_cfg.get("iou_threshold", 0.30),
+        appearance_weight=t_cfg.get("appearance_weight", 0.40),
+    )
+
+    b_cfg = cfg.get("behavioral", {})
+    monitor = BehavioralMonitor.from_config(b_cfg)
+    behavioral_enabled = b_cfg.get("enabled", True)
+
+    cap = cv2.VideoCapture(str(args.video))
+    if not cap.isOpened():
+        sys.exit(f"Error: cannot open video '{args.video}'")
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25
+    w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    writer = None
+    if args.output:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(str(args.output), fourcc, fps, (w, h))
+
     frame_count = 0
-    for frame_results in identifier.identify_video(
-        args.video, output_path=args.output, show=args.show
-    ):
-        frame_count += 1
-        for r in frame_results:
-            if r.cow_id != "unknown":
-                print(f"frame {frame_count:06d}  {r.cow_id}  sim={r.similarity:.3f}")
-    print(f"Processed {frame_count} frames.")
+    total_alerts = 0
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_count += 1
+
+            identify_results = identifier.identify_image(frame)
+            tracker_results  = tracker.update(identify_results)
+
+            alerts = []
+            if behavioral_enabled:
+                alerts = monitor.process(
+                    tracker_results=tracker_results,
+                    tracks=tracker._tracks,
+                    frame=frame,
+                    frame_number=frame_count,
+                    timestamp=time.time(),
+                    frame_wh=(w, h),
+                )
+
+            for alert in alerts:
+                total_alerts += 1
+                print(alert)
+
+            if writer or args.show:
+                # Draw tracker boxes (including behavioral alert highlights)
+                alerted_ids = {a.cow_id for a in alerts}
+                bboxes  = [tr["bbox"] for tr in tracker_results if tr.get("confirmed")]
+                cow_ids = [tr["cow_id"] for tr in tracker_results if tr.get("confirmed")]
+                annotated = draw_identities(frame, bboxes, cow_ids)
+                # Overlay alert markers
+                for alert in alerts:
+                    x1, y1, x2, y2 = alert.bbox.astype(int)
+                    cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                    cv2.putText(
+                        annotated,
+                        f"ALERT:{alert.anomaly_subtype}({alert.score:.2f})",
+                        (x1, max(0, y1 - 30)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2, cv2.LINE_AA,
+                    )
+                if writer:
+                    writer.write(annotated)
+                if args.show:
+                    cv2.imshow("CattleVision – Behavioral Monitor", annotated)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
+    finally:
+        cap.release()
+        if writer:
+            writer.release()
+        if args.show:
+            cv2.destroyAllWindows()
+
+    print(f"Processed {frame_count} frames. Behavioral alerts: {total_alerts}")
+    if behavioral_enabled:
+        summary = monitor.profiles_summary()
+        print(f"Cow profiles: {len(summary)} individual(s) tracked.")
 
 
 def cmd_enroll(args, cfg):

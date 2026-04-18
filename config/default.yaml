@@ -33,3 +33,49 @@ training:
   margin: 0.30
   val_split: 0.15
   device: null
+
+behavioral:
+  enabled: true
+
+  # Profiling / burn-in
+  burn_in_frames: 300          # frames of "normal" data collected per cow before alerting
+  refit_interval: 500          # refit IsolationForest every N frames after burn-in
+  history_maxlen: 2000         # rolling history buffer size for IsolationForest
+  embedding_ema_alpha: 0.05    # EMA smoothing for appearance centroid
+
+  # Optical flow (sparse Lucas-Kanade within detection bbox)
+  optical_flow_enabled: true
+  optical_flow_max_corners: 20
+
+  # Herd social analysis
+  social_analysis_enabled: true
+  social_min_herd_size: 2      # need at least 2 cows for peer-distance scoring
+  social_isolation_threshold: 2.5  # isolation_score ratio above which = anomalous
+
+  # Z-score motion detector
+  zscore_threshold: 3.0
+  zscore_motion_features:
+    - speed
+    - d_scale
+    - optical_flow_mag
+
+  # Isolation Forest (multi-feature unsupervised anomaly detection)
+  isolation_forest_enabled: true
+  isolation_forest_n_estimators: 50
+  isolation_forest_contamination: 0.05
+  isolation_forest_threshold: 0.60
+
+  # Appearance drift (cosine distance from rolling embedding centroid)
+  appearance_drift_enabled: true
+  appearance_drift_threshold: 0.30
+
+  # Alert gating
+  composite_alert_threshold: 0.65  # weighted composite score to fire alert
+  alert_cooldown_frames: 30        # suppress repeat alerts for same cow
+
+  # Composite score weights (should sum to 1.0)
+  detector_weights:
+    zscore_motion: 0.30
+    isolation_forest: 0.35
+    appearance_drift: 0.20
+    social_isolation: 0.15

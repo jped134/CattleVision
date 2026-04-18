@@ -211,11 +211,13 @@ class CowTracker:
         for track in self._tracks:
             if track.kalman.time_since_update <= 1:
                 output.append({
-                    "track_id":  track.kalman.id,
-                    "cow_id":    track.cow_id,
-                    "similarity": track.similarity,
-                    "bbox":      track.kalman.bbox.astype(int),
-                    "confirmed": track.confirmed,
+                    "track_id":    track.kalman.id,
+                    "cow_id":      track.cow_id,
+                    "similarity":  track.similarity,
+                    "bbox":        track.kalman.bbox.astype(int),
+                    "confirmed":   track.confirmed,
+                    "kalman_state": track.kalman._x.flatten().tolist(),
+                    "embedding":   track.embedding,
                 })
         return output
 
